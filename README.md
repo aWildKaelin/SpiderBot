@@ -1,7 +1,7 @@
 #  RP2040 Spider Bot
 
   
-This project aims to create a RP2040-base quadrupedal walker based.
+This project aims to create a RP2040-base quadrupedal walker based on MG90s servomotors.
 
 Currently, the project is being developed around the Pico W board, with the intention of creating a custom PCB once development ends.
 
