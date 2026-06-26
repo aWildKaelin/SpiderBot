@@ -17,6 +17,10 @@ The `.vscode` folder is intentionally not included in the repository because it 
 
 To open the project in Visual Studio Code, create a new Pico project using the extension, then replace the generated project files with the contents of this repository while keeping the generated `.vscode` directory.
 
+## Third-party code
+
+This project includes or uses `pico-ssd1306`, which is licensed under the BSD 3-Clause License. See the license file in the `pico-ssd1306` directory for details.
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
