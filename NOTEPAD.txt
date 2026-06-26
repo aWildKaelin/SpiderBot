@@ -1,0 +1,74 @@
+Layer 1 - The generic pose  ✔
+    - defines a center point and the body of the robot  ✔
+    - relative to the point, defines pitch and roll     ✔
+    - based on pitch and roll, calculates the relative coordinates of each corner   ✔
+        - only needs to compute height, displacement can't be accounted for with this actuator setup ✔
+
+
+Layer 2 - the initial motion    ✔
+    - externally defines a sequence of motions for one leg  ✔
+        - works like a state machine:   ✔
+            - home (stationary, at 0, 0), move up, swing forward, down, swing back  ✔
+        - defined as offsets compared to current pos    ✔
+    - allows for scaling or offsets, like having a shorter front-back stride    ✔
+    - because everything is defined in leg coordinates, it doesnt care about the dictated pose  ✔
+    - pair getTargetCoords(state, multiplier); // if state is up or down, multiplier does nothing, allows for variable stride length    ✔
+
+
+Layer 3 - The motion sequencer
+    - based on the state of the bot (crawl, trot, etc), coordinates the leg state machines
+        - sets order of motion and sync
+    - based on speed variables, set stride length and overall speed     ✔
+    - when one state is finished, advance state and generate new target coords  ✔
+    - on moveEnd                ✔
+        - advance states on each leg    ✔
+        - compute targets       ✔
+        - set last destination as root      ✔
+    - move start generates first few motions, gives the phase of each leg's move sequence
+
+
+Layer 4 - The extrapolator/executor ✔
+    - without exception, all legs should reach the next state at the same time  ✔
+        - this ensures this is the case ✔
+    - this program runs in the main loop, similar to the micromouse motors      ✔
+    - knowing start and end points, extrapolate and then multiply the applied offset by a float [0,1]   ✔
+        - going from phi 2 to 27, delta is 25, multiply 25 by float and add it to 2 until target    ✔
+        - the step of the float is defined by the time the motion should take to complete ✔
+    - sets final motor angles               ✔
+        - base pose + calculated offsets    ✔
+        - should also ensure that the motor orientation is account for ✔
+            - left motors forward is right motor backward, etc ✔
+
+
+Main program structure:
+    - exposes a set of generic functions such as
+        - set pose      (height, pitch, roll)   ✔
+        - set move type (trot, walk, run)
+        - set speed     (percentage from 0 to 1, 256 or something like that)    ✔
+        - set heading   (yaw rate, also a percentage, but with sign for direction)
+        - set facial expression (enum)          ✔
+    
+    - control schemes
+        - serial TTL receiver with logic level converter
+        - ELRS serial receiver
+        - complete automation via 2nd cpu core or external means
+        - check if buffer has received new command, if yes, parse and update on the spot
+
+ main loop:
+    - check control status
+        - serial receiver code
+        - AT MOST calls the functions detailed before
+    - run emergency sensors like imu and gyro
+        - ;-;
+    - run motion system with dt✔
+        - updates servo angle using The Float [0, 1]    ✔
+        - if The Float exceeds 1, update state      ✔
+        - sets servo angle to current angle     ✔
+
+
+
+Additional TODO:
+- add README sections for Features, Hardware, Code Description (brief)
+- clean up the code and add proper comments
+- clean up the pico-ssd1306 folder
+- provide 3D models and add schematics/board layouts
