@@ -1,11 +1,11 @@
 /*
 Copyright (C) 2026 aWildKaelin
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 
@@ -27,10 +27,10 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 
 #include "rawServo.h"
 
-float max(float a, float b){
+float clampMax(float a, float b){
     return a > b ? a : b;
 }
-float min(float a, float b){
+float clampMin(float a, float b){
     return a < b ? a : b;
 }
 
@@ -40,24 +40,15 @@ typedef struct vec3{
     float x, y, z;
 }vec3;
 
-typedef struct pair{
-    float first, second;
-}pair;
+typedef struct vec2{
+    float x, y;
+}vec2;
 
 enum struct moveType{
-    trot, walk, run, still
+    trot, crawl, still
 };
 
 moveType robotState = moveType::trot;
-
-enum struct moveState{
-    home = 0, up = 1, swingF, down, swingB
-};
-
-struct moveStruct{
-    moveState activeState;
-    uint8_t waitTime = 0;
-};
 
 enum struct emotion{
     normal = 0, happy = 1, dizzy, sad, excited, curious, sleepy, embarrassed, crying
@@ -86,22 +77,22 @@ typedef struct leg{
 
     void setPhi(float angle){
         setAngleRad(phiServo, angle);
-        pose.first = angle;
+        pose.x = angle;
     };
     void setTheta(float angle){
         setAngleRad(thetaServo, angle);
-        pose.second = angle;
+        pose.y = angle;
     };
 
-    moveStruct state = {moveState::home};
+    float phaseOffset = 0;
 
     // stores its own height for reference and the servo angle that represents 0
     // baseAngle is radians and only applies to height, not stride
     float height = 0, baseAngle = M_PI/2;
 
     // x/y, phi/theta
-    pair pose = {0, 0};
-    pair start = {0, 0}, target = {0, 0};
+    vec2 pose = {0, 0};
+    vec2 start = {0, 0}, target = {0, 0};
 }leg;
 
 
@@ -109,7 +100,7 @@ typedef struct leg{
 #define BOT_WIDTH 80    // mm
 #define BOT_LENGTH 130
 
-// THIS IS NOT ENOUGH, its not fully accurate, but its good for testing
+// This is 
 #define ARM_LENGTH 60.0f
 // this is the actuator arm of the leg, as the 4 bar linkage acts as a static, 
 // constant offset for the robot's height
@@ -133,12 +124,18 @@ leg* legs[4] = {
     &legBR
 };
 
-pair legOrientations[] ={
-    pair{-1, 1},
-    pair{-1, 1},
-    pair{1, -1},
-    pair{1, -1}
+vec2 legOrientations[] ={
+    vec2{-1, 1},
+    vec2{-1, 1},
+    vec2{1, -1},
+    vec2{1, -1}
 };
+
+
+double phaseFloat = 0;
+float trotOffset[] = {0.5, 0, 0, 0.5};
+float walkOffset[] = {0, 0.25, 0.5, 0.75};
+
 
 
 float getHeightAngle(float targetHeight){
@@ -164,22 +161,9 @@ float getHeightAngle(float targetHeight){
     return asin(targetHeight / ARM_LENGTH);
 }
 
-// first value is the stride length in radians, 2nd is height offset
-pair moveStorage[5] = {{0, 0}, {-1, 40}, {1, 40}, {1, 0}, {-1, 0}};
 
 
-pair computeNextServoTarget(moveState state, float multiplier = 1){
-    if(state == moveState::home){
-        return {0, 0.1674480115553};
-    }
 
-    int next = ((int)state + 1) % 5;
-    if(next == 0) next = 1;
-    if(state == moveState::swingB || state == moveState::swingF)
-        return {moveStorage[next].first * multiplier, getHeightAngle(moveStorage[next].second)};
-    else
-        return {moveStorage[next].first, getHeightAngle(moveStorage[next].second)};
-}
 
 
 float chassisPitch = 0, chassisRoll = 0;
@@ -190,16 +174,16 @@ float getCornerHeight(vec3 corner, float pitch, float roll){
     float result =  -corner.x * sin(pitch) + 
                     (corner.y * sin(roll) * cos(pitch));
 
-    return max(min(result, ARM_LENGTH - 15), -ARM_LENGTH + 5);
+    return clampMax(clampMin(result, ARM_LENGTH - 15), -ARM_LENGTH + 5);
 }
 
 
 // mm, deg, deg
 void setPose(float height, float pitch, float roll){
-    legFL.height = legOrientations[0].first * (height + getCornerHeight(cornerFL, pitch, roll));
-    legBL.height = legOrientations[1].first * (height + getCornerHeight(cornerBL, pitch, roll));
-    legFR.height = legOrientations[2].first * (height + getCornerHeight(cornerFR, pitch, roll));
-    legBR.height = legOrientations[3].first * (height + getCornerHeight(cornerBR, pitch, roll));
+    legFL.height = legOrientations[0].x * (height + getCornerHeight(cornerFL, pitch, roll));
+    legBL.height = legOrientations[1].x * (height + getCornerHeight(cornerBL, pitch, roll));
+    legFR.height = legOrientations[2].x * (height + getCornerHeight(cornerFR, pitch, roll));
+    legBR.height = legOrientations[3].x * (height + getCornerHeight(cornerBR, pitch, roll));
 
     // TODO: once i begin testing servos, make the proper baesAgles negative
     legFL.baseAngle = M_PI_2 + getHeightAngle(legFL.height);
@@ -209,17 +193,16 @@ void setPose(float height, float pitch, float roll){
 }
 
 
-// should reset pose to home and then set phase
+// TODO: there are 6 transitions which need to be accounted for
+// from home to swing
+// from home to return
+// from swing to return
+// from swing to home
+// from return to swing
+// form return to home
+// find a way to account for this, hopefully without edge cases
 void setMovementType(moveType type){
-    if(robotState == moveType::still){ // if starting from standstill
-
-    }
-    else if(type == moveType::still){   // if going to standstill
-        
-    }
-    else{
-
-    }
+    
 }
 
 
@@ -228,7 +211,7 @@ double timestep = 0;
 // -100 -> +100
 void setSpeed(float speed){
     // timestep is a linear range between -2 and 2, where 2 means switching states twice per second
-    // this is probably way too fast, to be tuned later
+    // this is probably way too fast, to be tuned later, TODO
     timestep = speed / 50;
 }
 // on 0 throttle for half a second, return to standstill
@@ -277,7 +260,10 @@ void setFace(emotion face, pico_ssd1306::SSD1306 *display){
 
 //TODO: repurpose into a generic "RECEIVE" function regardless of receive method
 //TODO: finish this
+// will integrate with the crsf parser
 void receiveSerial(){
+
+    // the current setup allows receiving messages over serial with USB
     while (tud_cdc_available())
     {
         // Create a place to hold the incoming message
@@ -357,8 +343,10 @@ int main()
     }
     */
     
-    setSpeed(50);
+    setSpeed(10);
     setPose(10, 0, 0);
+
+    // code used to center the servos in order to mount them properly
     //legFL.setTheta(M_PI_2);
     //legFL.setPhi(M_PI_2);
     //while(true){sleep_ms(1000);}
@@ -367,17 +355,18 @@ int main()
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
 
 
+    // loop used to showcase the faces of the robot
     /*
-    setFace(emotion(emote), &display);
-    emote++;
-    emote%=9;
-    sleep_ms(2000);
+    int emote =  0;
+    while(true){
+        setFace(emotion(emote), &display);
+        emote++;
+        emote%=9;
+        sleep_ms(2000);
+    }
     */
 
-
-    double TheFloat = 0;
-
-    int emote =  0;
+    
 
     uint dt = 0;
     uint64_t lastTime = time_us_64();
@@ -392,34 +381,31 @@ int main()
         // this sets the servo angles as starting positions + a fraction of the offset needed to reach the target
         // for phi, M_PI_2 is the baseAngle
         for(int i = 0; i < 4; i++){
-            legs[i]->setPhi(M_PI_2 + (legOrientations[i].first * (legs[i]->start.first + (TheFloat * (legs[i]->target.first - legs[i]->start.first)))));
-            legs[i]->setTheta(legs[i]->baseAngle + (legOrientations[i].second * (legs[i]->start.second + (TheFloat * (legs[i]->target.second - legs[i]->start.second)))));
+            legs[i]->setPhi(M_PI_2 + 
+                (legOrientations[i].x * 
+                    (legs[i]->start.x + 
+                        (phaseFloat * 
+                            (legs[i]->target.x - legs[i]->start.x)))));
+
+
+            legs[i]->setTheta(
+                legs[i]->baseAngle + 
+                    (legOrientations[i].y * 
+                        (legs[i]->start.y + 
+                            (phaseFloat * 
+                                (legs[i]->target.y - legs[i]->start.y)))));
         }
 
         
-        TheFloat += timestep * (dt / 1000000.0);
-        printf("%i %-10f %-10f\n", (int)legFL.state.activeState, TheFloat, legFL.start.first + (TheFloat * (legFL.target.first - legFL.start.first)));
+        phaseFloat += timestep * (dt / 1000000.0);
 
-        // phasing system
-        if(TheFloat >= 1 && robotState != moveType::still){ // if paused, don't advance state
-            // advance to next step
+        
 
-            for(int i = 0; i < 4; i++){
-                if(legs[i]->state.waitTime == 0){
-                    legs[i]->start = legs[i]->target;
-                    legs[i]->target = computeNextServoTarget(legs[i]->state.activeState);
-                    // TODO: based on yaw, calculate a multiplier per leg
-                    // YAW goes from -1 to 1, where -1 means turning left at max speed and 1 means turning right at max speed
-                    // this can be added to a list in sync with legs[i] because each leg has a hardcoded position
-                    int next = ((int)legs[i]->state.activeState + 1) % 5;
-                    if(next == 0) next = 1;
-                    legs[i]->state.activeState = moveState(next);
-                }
-            }
-        }
-        while(TheFloat >= 1.0)
-            TheFloat -= 1.0;
+        // accounts for the program somehow getting stuck
+        while(phaseFloat >= 1.0)
+            phaseFloat -= 1.0;
 
+        // delta time calculation
         dt = uint(time_us_64() - lastTime);
         lastTime = time_us_64();
     }
