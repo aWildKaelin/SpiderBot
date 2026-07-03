@@ -60,7 +60,7 @@ enum struct emotion{
 #define I2C_SDA 16
 #define I2C_SCL 17
 
-pico_ssd1306::SSD1306* display;
+pico_ssd1306::SSD1306* display = nullptr;
 
 
 void initDisplay(){
@@ -73,7 +73,14 @@ void initDisplay(){
     // For more examples of I2C use see https://github.com/raspberrypi/pico-examples/tree/master/i2c
 
 
-    *display = pico_ssd1306::SSD1306(I2C_PORT, 0x3C, pico_ssd1306::Size::W128xH64);
+    display = new pico_ssd1306::SSD1306(I2C_PORT, 0x3C, pico_ssd1306::Size::W128xH64);
+    if(!display){
+        while(true)
+        {
+            printf("Failed to initialize display!\n");
+            sleep_ms(5000);
+        }
+    }
     display->setOrientation(true);
 }
 
@@ -372,17 +379,19 @@ int main()
 
     
     initDisplay();
+    printf("%i\n", display);
 
-    /*
+    
     // loop used to showcase the faces of the robot    
     int emote =  0;
     while(true){
         setFace(emotion(emote), display);
+        printf("%i\n", emote);
         emote++;
         emote%=9;
         sleep_ms(2000);
     }
-    */
+    
 
 
     /*
