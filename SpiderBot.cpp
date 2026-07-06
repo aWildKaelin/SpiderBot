@@ -185,7 +185,6 @@ leg* legs[4] = {
     &legBL
 };
 
-//TODO: update
 // helps mirror servos to keep the math identical
 vec2 legOrientations[] ={
     vec2{1, -1},
@@ -276,12 +275,11 @@ float getCornerHeight(vec3 corner, float pitch, float roll){
 
 // mm, deg, deg
 void setPose(float height, float pitch, float roll){
-    legFL.height = legOrientations[0].x * (height + getCornerHeight(cornerFL, pitch, roll));
-    legBL.height = legOrientations[1].x * (height + getCornerHeight(cornerBL, pitch, roll));
-    legFR.height = legOrientations[2].x * (height + getCornerHeight(cornerFR, pitch, roll));
-    legBR.height = legOrientations[3].x * (height + getCornerHeight(cornerBR, pitch, roll));
+    legFR.height = legOrientations[0].x * (height + getCornerHeight(cornerFL, pitch, roll));
+    legBR.height = legOrientations[1].x * (height + getCornerHeight(cornerBL, pitch, roll));
+    legFL.height = legOrientations[2].x * (height + getCornerHeight(cornerFR, pitch, roll));
+    legBL.height = legOrientations[3].x * (height + getCornerHeight(cornerBR, pitch, roll));
 
-    // TODO: once i begin testing servos, make the proper baseAgles negative
     legFL.baseAngle = M_PI_2 + getHeightAngle(legFL.height);
     legFR.baseAngle = M_PI_2 + getHeightAngle(legFR.height);
     legBL.baseAngle = M_PI_2 + getHeightAngle(legBL.height);
@@ -289,14 +287,7 @@ void setPose(float height, float pitch, float roll){
 }
 
 
-// TODO: there are 6 transitions which need to be accounted for
-// from home to swing
-// from home to return
-// from swing to return
-// from swing to home
-// from return to swing
-// from return to home
-// See if transitioning from one phase to another is disruptive in any way
+
 void setMovementType(moveType type){
     if(type == moveType::trot){
         for(int i = 0; i < 4; i++){
@@ -389,6 +380,11 @@ int main()
     sleep_ms(5000);
 
     initServo(servoPins, SERVO_CNT);
+    
+    for(int i = 0; i < 4; i++){
+        legs[i]->setTheta(M_PI_2);
+        legs[i]->setPhi(M_PI_2);
+    }
 
     
     initDisplay();
@@ -429,18 +425,20 @@ int main()
     */
     
     setSpeed(10);
-    setPose(10, 0, 0);
+    setPose(50, 0, 0);
 
     setFace(emotion::happy, display);
     
     setMovementType(moveType::crawl);
 
     // code used to center the servos in order to mount them properly
+    /*
     for(int i = 0; i < 4; i++){
         legs[i]->setTheta(M_PI_2);
         legs[i]->setPhi(M_PI_2);
     }
     while(true){sleep_ms(1000);}
+    */
     
 
 
@@ -469,13 +467,14 @@ int main()
             while(phaseFloat >= 1.0)
                 phaseFloat -= 1.0;
             
+            
             for(int i = 0; i < 4; i++){
                 double phase = legs[i]->phaseOffset + phaseFloat;
                 phase = phase < 1 ? phase : phase - 1;
 
                 vec2 result = getLegPos(phase);
-                legs[i]->setPhi(result.x);
-                legs[i]->setTheta(result.y);
+                legs[i]->setPhi(M_PI_2 + (result.x * legOrientations[i].x));
+                legs[i]->setTheta(legs[i]->baseAngle + (result.y * legOrientations[i].y));
             }
         }
 
