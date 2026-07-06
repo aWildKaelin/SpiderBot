@@ -167,31 +167,31 @@ typedef struct leg{
 
 
 // X forward, Y right, Z up
-const vec3 cornerFL = { BOT_LENGTH / 2, -BOT_WIDTH / 2, 0};
-const vec3 cornerBL = {-BOT_LENGTH / 2, -BOT_WIDTH / 2, 0};
 const vec3 cornerFR = { BOT_LENGTH / 2,  BOT_WIDTH / 2, 0};
 const vec3 cornerBR = {-BOT_LENGTH / 2,  BOT_WIDTH / 2, 0};
+const vec3 cornerFL = { BOT_LENGTH / 2, -BOT_WIDTH / 2, 0};
+const vec3 cornerBL = {-BOT_LENGTH / 2, -BOT_WIDTH / 2, 0};
 
-//TODO: update
-leg legFL = {6, 7};
-leg legBL = {8, 9};
-leg legFR = {10, 11};
-leg legBR = {12, 13};
+// forward-back, up-down
+leg legFR = {13, 12};
+leg legBR = {11, 10};
+leg legFL = {9, 8};
+leg legBL = {6, 7};
 
 leg* legs[4] = {
-    &legFL,
-    &legBL,
     &legFR,
-    &legBR
+    &legBR,
+    &legFL,
+    &legBL
 };
 
 //TODO: update
 // helps mirror servos to keep the math identical
 vec2 legOrientations[] ={
-    vec2{-1, 1},
-    vec2{-1, 1},
     vec2{1, -1},
-    vec2{1, -1}
+    vec2{1, -1},
+    vec2{-1, 1},
+    vec2{-1, 1},
 };
 
 
@@ -226,7 +226,7 @@ float getHeightAngle(float targetHeight){
 
 double phaseFloat = 0;
 float trotOffset[] = {0.5, 0, 0, 0.5};
-float walkOffset[] = {0, 0.25, 0.5, 0.75};
+float crawlOffset[] = {0, 0.5, 0.25, 0.75};
 
 
 // movement has two steps: swing and return
@@ -235,14 +235,14 @@ float walkOffset[] = {0, 0.25, 0.5, 0.75};
 // The time for the two steps must always add to one
 // I've chosen to return time as 1 - swing time instead of giving it a new variable
 const float trotSwingTime = 0.25;
-const float walkSwingTime = 0.2;
+const float crawlSwingTime = 0.2;
 
 
 // first value is forward-back, 2nd is up-down
 vec2 getLegPos(float phase){
     phase = minf(phase, 1);
     if(robotState != moveType::still){
-        float swingTime = robotState == moveType::trot ? trotSwingTime : walkSwingTime;
+        float swingTime = robotState == moveType::trot ? trotSwingTime : crawlSwingTime;
 
         if(phase < swingTime){
             float phaseProgress = phase / swingTime;
@@ -296,10 +296,23 @@ void setPose(float height, float pitch, float roll){
 // from swing to home
 // from return to swing
 // from return to home
-// find a way to account for this, hopefully without edge cases
-// This is the function that applies phase offsets to the legs, TODO
+// See if transitioning from one phase to another is disruptive in any way
 void setMovementType(moveType type){
-    
+    if(type == moveType::trot){
+        for(int i = 0; i < 4; i++){
+            legs[i]->phaseOffset = trotOffset[i];
+        }
+    }
+    else if(type == moveType::crawl){
+        for(int i = 0; i < 4; i++){
+            legs[i]->phaseOffset = crawlOffset[i];
+        }
+    }
+    else{
+        for(int i = 0; i < 4; i++){
+            legs[i]->phaseOffset = 0;
+        }
+    }
 }
 
 
@@ -382,6 +395,7 @@ int main()
     printf("%i\n", display);
 
     
+    /*
     // loop used to showcase the faces of the robot    
     int emote =  0;
     while(true){
@@ -391,8 +405,7 @@ int main()
         emote%=9;
         sleep_ms(2000);
     }
-    
-
+    */
 
     /*
     // Enable wifi station
@@ -418,10 +431,16 @@ int main()
     setSpeed(10);
     setPose(10, 0, 0);
 
+    setFace(emotion::happy, display);
+    
+    setMovementType(moveType::crawl);
+
     // code used to center the servos in order to mount them properly
-    //legFL.setTheta(M_PI_2);
-    //legFL.setPhi(M_PI_2);
-    //while(true){sleep_ms(1000);}
+    for(int i = 0; i < 4; i++){
+        legs[i]->setTheta(M_PI_2);
+        legs[i]->setPhi(M_PI_2);
+    }
+    while(true){sleep_ms(1000);}
     
 
 
@@ -434,48 +453,35 @@ int main()
     uint dt = 0;
     uint64_t lastTime = time_us_64();
     while (true) {
-        receiveSerial(); //to add: setSpeed, setFace, setPose,
+        //receiveSerial(); //to add: setSpeed, setFace, setPose,
 
-        phaseFloat += timestep * (dt / 1000000.0);
+        if(robotState != moveType::still){
 
-
-        // !!!!!!!!!!!!!!!!!!!!! IMPORTANT NOTE !!!!!!!!!!!!!!!!!!!!! 
-        // servos should ALWAYS work in offsets!
-        // up-down axis offsets from baseAngle
-        // forward-back axis offsets from M_PI_2
-        // when assembled, legs should extend out from the center of the servo's range
+            phaseFloat += timestep * (dt / 1000000.0);
 
 
+            // !!!!!!!!!!!!!!!!!!!!! IMPORTANT NOTE !!!!!!!!!!!!!!!!!!!!! 
+            // servos should ALWAYS work in offsets!
+            // up-down axis offsets from baseAngle
+            // forward-back axis offsets from M_PI_2
+            // when assembled, legs should extend out from the center of the servo's range
 
-        /*
-        // stored for reference
-        // this sets the servo angles as starting positions + a fraction of the offset needed to reach the target
-        // for phi, M_PI_2 is the baseAngle
-        for(int i = 0; i < 4; i++){
-            legs[i]->setPhi(M_PI_2 + 
-                (legOrientations[i].x * 
-                    (legs[i]->start.x + 
-                        (phaseFloat * 
-                            (legs[i]->target.x - legs[i]->start.x)))));
+            while(phaseFloat >= 1.0)
+                phaseFloat -= 1.0;
+            
+            for(int i = 0; i < 4; i++){
+                double phase = legs[i]->phaseOffset + phaseFloat;
+                phase = phase < 1 ? phase : phase - 1;
 
-
-            legs[i]->setTheta(
-                legs[i]->baseAngle + 
-                    (legOrientations[i].y * 
-                        (legs[i]->start.y + 
-                            (phaseFloat * 
-                                (legs[i]->target.y - legs[i]->start.y)))));
+                vec2 result = getLegPos(phase);
+                legs[i]->setPhi(result.x);
+                legs[i]->setTheta(result.y);
+            }
         }
-        */
-        //TODO: add new gait system logic in main loop
-
-
-        // accounts for the program somehow getting stuck
-        while(phaseFloat >= 1.0)
-            phaseFloat -= 1.0;
 
         // delta time calculation
         dt = uint(time_us_64() - lastTime);
         lastTime = time_us_64();
+
     }
 }
