@@ -70,11 +70,7 @@ Main program structure:
 Additional TODO:
 - rewrite NOTEPAD.txt into a proper explanation of the system
 - add README sections for Features, Hardware, Code Description (brief)
-- clean up the code and add proper comments
 - clean up the pico-ssd1306 folder
 - provide 3D models and add schematics/board layouts
 
-
-
-Note to self:
-- architecture changed. I'm now using a proper global phase with phase offsets per leg. Each leg motion will have two states: swing and return, where swing makes the leg follow a semicircle trajectory to move forward and return brings it back, linear motion.
+ 

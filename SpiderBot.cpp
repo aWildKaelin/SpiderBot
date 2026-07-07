@@ -124,10 +124,10 @@ void setFace(emotion face, pico_ssd1306::SSD1306 *display){
 
 
 
-// TODO: give this the actual measurements of the robot
-#define BOT_WIDTH 80    // mm
+// while chassis is 80mm wide, the distance between the legs is wider
+#define BOT_WIDTH 140    // mm
 #define BOT_LENGTH 130
-#define ARM_LENGTH 60.0f //mm
+#define ARM_LENGTH 25.0f //mm
 #define SERVO_CNT 8
 
 float chassisPitch = 0, chassisRoll = 0;
@@ -216,7 +216,6 @@ float getHeightAngle(float targetHeight){
 
     return tempAngle;
     */
-    // TODO: add safety clamp
     float value = maxf(minf(targetHeight / ARM_LENGTH, 1), -1);;
     return asinf(value);
 }
@@ -268,7 +267,6 @@ float getCornerHeight(vec3 corner, float pitch, float roll){
     float result =  -corner.x * sin(pitch) + 
                     (corner.y * sin(roll) * cos(pitch));
 
-    //TODO: parametrize this clamp
     // makes sure the requested height isn't out of bounds and leaves headroom for walking
     return maxf(minf(result, ARM_LENGTH - 15), -ARM_LENGTH + 5);
 }
@@ -308,32 +306,27 @@ void setMovementType(moveType type){
 
 
 
+
+
+
+
+//TODO: implement control interface
+// should automatically change between trot and crawl depending on speed
+// on 0 throttle for half a second, return to standstill
+// currently doesn't support going backwards, clamped to forward for testing
+// test and find a decent upper limit
+
 // defined as how much of a step is finished per second
 double timestep = 0;
 // -100 -> +100
 void setSpeed(float speed){
-
-    //TODO: currently doesn't support going backwards, clamped to forward for testing
     speed = minf(100, maxf(0, speed));
-
     // a timestep of 1 means the robot is going through an entire walk cycle once per second
-    // TODO: test and find a decent upper limit
     timestep = speed / 200;
 }
-//TODO: on 0 throttle for half a second, return to standstill
-
-
 // yaw rate is a multiplier applied to stride length
 // positive makes left stride shorter, turning left, negative shortens right stride
-//TODO: implement
 void setHeading(float yawRate);
-
-
-
-
-//TODO: repurpose into a generic "RECEIVE" function regardless of receive method
-//TODO: finish this
-// will integrate with the upcoming crsf parser
 void receiveSerial(){
 
     // the current setup allows receiving messages over serial with USB
@@ -367,16 +360,23 @@ void receiveSerial(){
 
 
 
+
 int main()
 {
     stdio_init_all();
 
-    // Initialise the Wi-Fi chip
-    if (cyw43_arch_init()) {
-        printf("Wi-Fi init failed\n");
-        return -1;
-    }
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
+
+    #if defined(PICO_DEFAULT_LED_PIN)
+        gpio_init(PICO_DEFAULT_LED_PIN);
+        gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+        gpio_put(PICO_DEFAULT_LED_PIN, true);
+    #elif defined(CYW43_WL_GPIO_LED_PIN)
+        // For Pico W devices we need to initialise the driver etc
+        cyw43_arch_init();
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
+    #endif
+
+
     sleep_ms(5000);
 
     initServo(servoPins, SERVO_CNT);
@@ -388,8 +388,6 @@ int main()
 
     
     initDisplay();
-    printf("%i\n", display);
-
     
     /*
     // loop used to showcase the faces of the robot    
@@ -403,29 +401,9 @@ int main()
     }
     */
 
-    /*
-    // Enable wifi station
-    cyw43_arch_enable_sta_mode();
-
-    printf("Connecting to Wi-Fi...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms("Your Wi-Fi SSID", "Your Wi-Fi Password", CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-        printf("failed to connect.\n");
-        while(true){
-            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
-            sleep_ms(800);
-            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
-            sleep_ms(500);
-        }
-    } else {
-        printf("Connected.\n");
-        // Read the ip address in a human readable way
-        uint8_t *ip_address = (uint8_t*)&(cyw43_state.netif[0].ip_addr.addr);
-        printf("IP address %d.%d.%d.%d\n", ip_address[0], ip_address[1], ip_address[2], ip_address[3]);
-    }
-    */
     
-    setSpeed(10);
-    setPose(50, 0, 0);
+    setSpeed(50);
+    setPose(20, 0, 0);
 
     setFace(emotion::happy, display);
     
@@ -442,17 +420,20 @@ int main()
     
 
 
-    // LED turning off means setup stopped
-    // TODO: add #ifndef for pico and pico W boards
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
+    // LED turning off means setup completed
+    #if defined(PICO_DEFAULT_LED_PIN)
+        gpio_put(PICO_DEFAULT_LED_PIN, false);
+    #elif defined(CYW43_WL_GPIO_LED_PIN)
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
+    #endif
 
     
 
     uint dt = 0;
     uint64_t lastTime = time_us_64();
-    while (true) {
-        //receiveSerial(); //to add: setSpeed, setFace, setPose,
 
+    // main loop
+    while (true) {
         if(robotState != moveType::still){
 
             phaseFloat += timestep * (dt / 1000000.0);

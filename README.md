@@ -5,7 +5,7 @@ This project aims to create a RP2040-base quadrupedal walker based on MG90s serv
 
 Currently, the project is being developed around the Pico W board, with the intention of creating a custom PCB once development ends.
 
-**This project is currently under active development.** The gait generation system and communication interface have not yet been implemented.
+**This project is currently under active development.** The communication interface has not yet been implemented.
 
 See `NOTEPAD.txt` for the complete status report of the codebase, as well as an explanation for how its structured.
 
