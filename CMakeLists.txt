@@ -56,10 +56,12 @@ target_include_directories(SpiderBot PRIVATE
 
 
 add_subdirectory(pico-ssd1306)
+add_subdirectory(pico_crsf)
 
 # Add any user requested libraries
 target_link_libraries(SpiderBot 
         pico_ssd1306
+        pico_crsf
         hardware_i2c
         hardware_pwm
         # hardware_timer     # what I used for the micromouse calibration interrupt

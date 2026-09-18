@@ -10,7 +10,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 #include <stdio.h>
-#include <tusb.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/pwm.h"
@@ -25,6 +24,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include "pico-ssd1306/ssd1306.h"
 #include "pico-ssd1306/textRenderer/TextRenderer.h"
 
+#include "pico_crsf/crsf_parser.h"
 
 #include "rawServo.h"
 
@@ -53,6 +53,16 @@ moveType robotState = moveType::trot;
 enum struct emotion{
     normal = 0, happy = 1, dizzy, sad, excited, curious, sleepy, embarrassed, crying
 };
+
+
+
+// ELRS Receiver
+#define UART_ID uart1
+
+#define UART_TX_PIN 20
+#define UART_RX_PIN 21
+
+crsf_parser parser;
 
 
 
@@ -327,35 +337,31 @@ void setSpeed(float speed){
 // yaw rate is a multiplier applied to stride length
 // positive makes left stride shorter, turning left, negative shortens right stride
 void setHeading(float yawRate);
-void receiveSerial(){
 
-    // the current setup allows receiving messages over serial with USB
-    // this will be discarded later
-    while (tud_cdc_available())
-    {
-        // Create a place to hold the incoming message
-        static char message[16];
-        static unsigned int message_pos = 0;
-        // Read the next available byte in the serial receive buffer
-        char inByte = getchar();
-        // Message coming in (check not terminating character) and guard for over message size
-        if (inByte != '\n' && (message_pos < 16 - 1))
-        {
-            // Add the incoming byte to our message
-            message[message_pos] = inByte;
-            message_pos++;
-        }
-        // Full message received...
-        else
-        {
-            switch(message[0]){
-            case 's':
-                setSpeed(5);
-                break;
-            }
-            message_pos = 0;
-        }
-    }
+void handleELRS(){
+    
+    //setSpeed((parser.RCChannels.channel_3 - 180) / 18);
+
+    //TODO: 
+    // setPose on right stick
+    // yaw on stick yaw
+    // expression on wheel
+    // movementType on switch
+    // look in betaflight to see which channel is which
+
+    /*
+    arm button -> aux 1, chan 5     1000 -> 2000
+    switch left -> aux 2, chan 6    1000 -> 1503 -> 2000
+    switch right -> aux 3, chan 7   1000 -> 1503 -> 2000
+    button right -> aux 4, chan 8   1000 -> 2000
+    temp button -> aux 5,  chan 9   1000 -> 2000
+    wheel -> aux 6, chan 10         1000 - 18 notched steps - 2000
+    */
+    setPose(20, 0, 0);
+
+    setFace(emotion::happy, display);
+    
+    setMovementType(moveType::crawl);
 }
 
 
@@ -378,6 +384,15 @@ int main()
 
 
     sleep_ms(5000);
+
+
+    uart_init(UART_ID, 420000);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+
+    CRSFParser_init(&parser, UART_ID);
+
+
 
     initServo(servoPins, SERVO_CNT);
     
@@ -402,12 +417,12 @@ int main()
     */
 
     
-    setSpeed(50);
+    setSpeed(0);
     setPose(20, 0, 0);
 
     setFace(emotion::happy, display);
     
-    setMovementType(moveType::crawl);
+    setMovementType(moveType::still);
 
     // code used to center the servos in order to mount them properly
     /*
@@ -434,6 +449,9 @@ int main()
 
     // main loop
     while (true) {
+        CRSFParser_update(&parser);
+        handleELRS();
+
         if(robotState != moveType::still){
 
             phaseFloat += timestep * (dt / 1000000.0);
