@@ -57,10 +57,10 @@ enum struct emotion{
 
 
 // ELRS Receiver
-#define UART_ID uart1
+#define UART_ID uart0
 
-#define UART_TX_PIN 20
-#define UART_RX_PIN 21
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
 
 crsf_parser parser;
 
@@ -341,6 +341,7 @@ void setHeading(float yawRate);
 void handleELRS(){
     
     //setSpeed((parser.RCChannels.channel_3 - 180) / 18);
+    printf("%04i %04i %04i %04i %04i %04i %04i %04i\n", parser.channels[0], parser.channels[1], parser.channels[2], parser.channels[3], parser.channels[4], parser.channels[5], parser.channels[6], parser.channels[7]);
 
     //TODO: 
     // setPose on right stick
@@ -350,18 +351,22 @@ void handleELRS(){
     // look in betaflight to see which channel is which
 
     /*
-    arm button -> aux 1, chan 5     1000 -> 2000
-    switch left -> aux 2, chan 6    1000 -> 1503 -> 2000
-    switch right -> aux 3, chan 7   1000 -> 1503 -> 2000
-    button right -> aux 4, chan 8   1000 -> 2000
-    temp button -> aux 5,  chan 9   1000 -> 2000
-    wheel -> aux 6, chan 10         1000 - 18 notched steps - 2000
+    channels[0] -> Roll (Aileron)   0174 -> 1811
+    channels[1] -> Pitch (Elevator) 0174 -> 1800
+    channels[2] -> Throttle         0174 -> 1801
+    channels[3] -> Yaw (Rudder)     0174 -> 1811
+    arm button -> aux 1, chan 5     0191 -> 1792
+    switch left -> aux 2, chan 6    0191 -> 0997 -> 1792
+    switch right -> aux 3, chan 7   0191 -> 0997 -> 1792
+    button right -> aux 4, chan 8   0191 -> 1792
+    temp button -> aux 5,  chan 9   0191 -> 1792
+    wheel -> aux 6, chan 10         18 notched steps
     */
     setPose(20, 0, 0);
 
     setFace(emotion::happy, display);
     
-    setMovementType(moveType::crawl);
+    //setMovementType(moveType::crawl);
 }
 
 
