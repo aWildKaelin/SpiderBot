@@ -297,6 +297,7 @@ void setPose(float height, float pitch, float roll){
 
 
 void setMovementType(moveType type){
+    robotState = type;
     if(type == moveType::trot){
         for(int i = 0; i < 4; i++){
             legs[i]->phaseOffset = trotOffset[i];
@@ -330,7 +331,9 @@ void setMovementType(moveType type){
 double timestep = 0;
 // -100 -> +100
 void setSpeed(float speed){
+    // clamp at 0 until i have backwards working
     speed = minf(100, maxf(0, speed));
+
     // a timestep of 1 means the robot is going through an entire walk cycle once per second
     timestep = speed / 200;
 }
@@ -338,35 +341,63 @@ void setSpeed(float speed){
 // positive makes left stride shorter, turning left, negative shortens right stride
 void setHeading(float yawRate);
 
+
+#define STICK_LOW 180
+#define STICK_HIGH 1799
+#define STICK_CENTER ((STICK_HIGH - STICK_LOW) / 2)
+#define STICK_DEADZONE 200
+
 void handleELRS(){
     
     //setSpeed((parser.RCChannels.channel_3 - 180) / 18);
-    printf("%04i %04i %04i %04i %04i %04i %04i %04i\n", parser.channels[0], parser.channels[1], parser.channels[2], parser.channels[3], parser.channels[4], parser.channels[5], parser.channels[6], parser.channels[7]);
+    //printf("%04i %04i %04i %04i %04i %04i %04i %04i %04i %04i\n", parser.channels[0], parser.channels[1], parser.channels[2], parser.channels[3], parser.channels[4], parser.channels[5], parser.channels[6], parser.channels[7], parser.channels[8], parser.channels[9]);
 
     //TODO: 
     // setPose on right stick
     // yaw on stick yaw
-    // expression on wheel
-    // movementType on switch
-    // look in betaflight to see which channel is which
-
     /*
+
     channels[0] -> Roll (Aileron)   0174 -> 1811
     channels[1] -> Pitch (Elevator) 0174 -> 1800
     channels[2] -> Throttle         0174 -> 1801
     channels[3] -> Yaw (Rudder)     0174 -> 1811
-    arm button -> aux 1, chan 5     0191 -> 1792
-    switch left -> aux 2, chan 6    0191 -> 0997 -> 1792
-    switch right -> aux 3, chan 7   0191 -> 0997 -> 1792
-    button right -> aux 4, chan 8   0191 -> 1792
-    temp button -> aux 5,  chan 9   0191 -> 1792
-    wheel -> aux 6, chan 10         18 notched steps
+    arm button -> aux 1, chan 4     0191 -> 1792
+    switch left -> aux 2, chan 5    0191 -> 0997 -> 1792
+    switch right -> aux 3, chan 6   0191 -> 0997 -> 1792
+    button right -> aux 4, chan 7   0191 -> 1792
+    temp button -> aux 5,  chan 8   0191 -> 1792
+    wheel -> aux 6, chan 9         0191 - 18 notched steps - 1792
     */
-    setPose(20, 0, 0);
 
-    setFace(emotion::happy, display);
+    // TODO: arm
+    // if arm button is off, sploot, else run rest of code, exception is face
+    if(parser.channels[4] >= 1500){
+        setPose(20, 0, 0);
+        
+        int throttle = parser.channels[2] - STICK_LOW - STICK_CENTER;
+        if(abs(throttle) >= STICK_DEADZONE){
+            setSpeed(throttle / (STICK_CENTER / 100.0f));
+            setMovementType(moveType::crawl);
+        }
+        else{
+            setSpeed(0);
+            setMovementType(moveType::still);
+        }
+    }
+    else
+    {
+        if (robotState != moveType::still) {
+            setMovementType(moveType::still);
+
+            for (int i = 0; i < 4; i++) {
+                legs[i]->setTheta(M_PI_2);
+                legs[i]->setPhi(M_PI_2);
+            }
+        }
+    }
     
-    //setMovementType(moveType::crawl);
+
+    setFace(emotion((parser.channels[9] - 191) / ((1792 - 191) / 9)), display);
 }
 
 
@@ -422,7 +453,7 @@ int main()
     */
 
     
-    setSpeed(0);
+    //setSpeed(50);
     setPose(20, 0, 0);
 
     setFace(emotion::happy, display);
@@ -455,31 +486,37 @@ int main()
     // main loop
     while (true) {
         CRSFParser_update(&parser);
-        handleELRS();
-
-        if(robotState != moveType::still){
-
-            phaseFloat += timestep * (dt / 1000000.0);
-
-
-            // !!!!!!!!!!!!!!!!!!!!! IMPORTANT NOTE !!!!!!!!!!!!!!!!!!!!! 
-            // servos should ALWAYS work in offsets!
-            // up-down axis offsets from baseAngle
-            // forward-back axis offsets from M_PI_2
-            // when assembled, legs should extend out from the center of the servo's range
-
-            while(phaseFloat >= 1.0)
-                phaseFloat -= 1.0;
+        if(!parser.failsafe){
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
+            handleELRS();
+            
+            if(robotState != moveType::still){
+            
+                phaseFloat += timestep * (dt / 1000000.0);
             
             
-            for(int i = 0; i < 4; i++){
-                double phase = legs[i]->phaseOffset + phaseFloat;
-                phase = phase < 1 ? phase : phase - 1;
-
-                vec2 result = getLegPos(phase);
-                legs[i]->setPhi(M_PI_2 + (result.x * legOrientations[i].x));
-                legs[i]->setTheta(legs[i]->baseAngle + (result.y * legOrientations[i].y));
+                // !!!!!!!!!!!!!!!!!!!!! IMPORTANT NOTE !!!!!!!!!!!!!!!!!!!!! 
+                // servos should ALWAYS work in offsets!
+                // up-down axis offsets from baseAngle
+                // forward-back axis offsets from M_PI_2
+                // when assembled, legs should extend out from the center of the servo's range
+            
+                while(phaseFloat >= 1.0)
+                    phaseFloat -= 1.0;
+                
+                
+                for(int i = 0; i < 4; i++){
+                    double phase = legs[i]->phaseOffset + phaseFloat;
+                    phase = phase < 1 ? phase : phase - 1;
+                
+                    vec2 result = getLegPos(phase);
+                    legs[i]->setPhi(M_PI_2 + (result.x * legOrientations[i].x));
+                    legs[i]->setTheta(legs[i]->baseAngle + (result.y * legOrientations[i].y));
+                }
             }
+        }
+        else{
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
         }
 
         // delta time calculation
