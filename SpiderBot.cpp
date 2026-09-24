@@ -322,17 +322,17 @@ void setMovementType(moveType type){
 
 
 //TODO: implement control interface
-// should automatically change between trot and crawl depending on speed
-// on 0 throttle for half a second, return to standstill
-// currently doesn't support going backwards, clamped to forward for testing
-// test and find a decent upper limit
+// should automatically change between trot and crawl depending on speed (optional)
+// yaw shortens the stride length on the respective side
+// exception on yaw: when moveType::still, yaw becomes speed and bot should turn in place using trot 
+// pose on right stick (optional)
 
 // defined as how much of a step is finished per second
 double timestep = 0;
 // -100 -> +100
 void setSpeed(float speed){
     // clamp at 0 until i have backwards working
-    speed = minf(100, maxf(0, speed));
+    speed = minf(100, maxf(-100, speed));
 
     // a timestep of 1 means the robot is going through an entire walk cycle once per second
     timestep = speed / 200;
@@ -352,11 +352,7 @@ void handleELRS(){
     //setSpeed((parser.RCChannels.channel_3 - 180) / 18);
     //printf("%04i %04i %04i %04i %04i %04i %04i %04i %04i %04i\n", parser.channels[0], parser.channels[1], parser.channels[2], parser.channels[3], parser.channels[4], parser.channels[5], parser.channels[6], parser.channels[7], parser.channels[8], parser.channels[9]);
 
-    //TODO: 
-    // setPose on right stick
-    // yaw on stick yaw
     /*
-
     channels[0] -> Roll (Aileron)   0174 -> 1811
     channels[1] -> Pitch (Elevator) 0174 -> 1800
     channels[2] -> Throttle         0174 -> 1801
@@ -369,8 +365,7 @@ void handleELRS(){
     wheel -> aux 6, chan 9         0191 - 18 notched steps - 1792
     */
 
-    // TODO: arm
-    // if arm button is off, sploot, else run rest of code, exception is face
+
     if(parser.channels[4] >= 1500){
         setPose(20, 0, 0);
         
@@ -503,6 +498,9 @@ int main()
             
                 while(phaseFloat >= 1.0)
                     phaseFloat -= 1.0;
+                
+                while(phaseFloat <= -0.0)
+                    phaseFloat += 1.0;
                 
                 
                 for(int i = 0; i < 4; i++){
